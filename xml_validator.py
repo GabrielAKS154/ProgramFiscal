@@ -12,12 +12,12 @@ ACCENT  = "#7c6af7"
 ACCENT2 = "#5a4fcf"
 TEXT    = "#e0e0f0"
 MUTED   = "#8888aa"
-SUCCESS = "#4caf82"
-ERROR   = "#f06060"
-WARNING = "#f0b060"
+SUCCESS = "#4caf82"   # verde
+ERROR   = "#f06060"   # vermelho
+WARNING = "#f0b060"   # laranja
+INFO    = "#6ab0f5"   # azul claro
+GRAY    = "#aaaaaa"   # cinza
 BORDER  = "#3a3a55"
-INFO    = "#6ab0f5"
-GRAY    = "#aaaaaa"
 
 # Colunas fixas de resultado (ordem exata)
 COLUNAS = [
@@ -30,11 +30,11 @@ COLUNAS = [
     "CCLASSTRIB ou CCREDPRES",
 ]
 
-# Mapeamento coluna → tags XML
+# Mapeamento coluna -> tags XML
 MAPA_ITENS = {
     "CNPJ":                    ["emit/CNPJ", "CNPJ"],
     "TIPO":                    ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
-    "ART. LC 214/2025":        [],   # apenas referencia — nao busca no XML
+    "ART. LC 214/2025":        [],
     "NCM/NBS":                 ["NCM", "NBS", "det/prod/NCM", "det/serv/NBS"],
     "DESCRICAO":               ["xProd", "xDescServ", "det/prod/xProd", "det/serv/xDescServ"],
     "CST":                     ["CST", "CSOSN",
@@ -46,16 +46,15 @@ MAPA_ITENS = {
                                 "det/imposto/cClassTrib", "det/imposto/cCredPres"],
 }
 
-# Cores por status
-COR_TAG = {
-    "OK":                    "ok",
-    "OK (raiz)":             "ok",
-    "Divergente":            "erro",
-    "Campo vazio no XML":    "vazio_xml",
-    "Campo vazio no Excel":  "vazio_excel",
-    "Campo vazio":           "vazio_ambos",
-    "Referencia legal":      "info",
-    "—":                     "info",
+# status -> tag de cor
+STATUS_TAG = {
+    "OK":                   "ok",
+    "OK (raiz)":            "ok",
+    "Divergente":           "erro",
+    "Campo vazio no XML":   "vazio_xml",
+    "Campo vazio no Excel": "vazio_excel",
+    "Campo vazio":          "vazio_ambos",
+    "Referencia legal":     "info",
 }
 
 def normaliza_cnpj(v):
@@ -75,7 +74,7 @@ def vazio(v):
 class XMLValidatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("XML Validator  v2.5")
+        self.title("XML Validator  v2.6")
         self.geometry("1400x720")
         self.minsize(1000, 580)
         self.configure(bg=BG)
@@ -123,7 +122,7 @@ class XMLValidatorApp(tk.Tk):
         self._btn(left, "Limpar tudo", self._clear, color=SURFACE).pack(fill="x")
 
         self._sep(left)
-        self._section(left, "Legenda (por celula)")
+        self._section(left, "Legenda (por linha)")
         for cor, txt in [
             (SUCCESS, "OK"),
             (ERROR,   "Divergente"),
@@ -133,48 +132,49 @@ class XMLValidatorApp(tk.Tk):
             (MUTED,   "Referencia legal"),
         ]:
             row = tk.Frame(left, bg=BG)
-            row.pack(anchor="w", pady=1)
-            tk.Frame(row, bg=cor, width=12, height=12).pack(side="left", padx=(0, 6))
-            tk.Label(row, text=txt, bg=BG, fg=TEXT, font=("Segoe UI", 8)).pack(side="left")
+            row.pack(anchor="w", pady=2)
+            tk.Frame(row, bg=cor, width=14, height=14).pack(side="left", padx=(0, 8))
+            tk.Label(row, text=txt, bg=BG, fg=cor,
+                     font=("Segoe UI", 9, "bold")).pack(side="left")
 
         right = tk.Frame(body, bg=BG)
         right.pack(side="left", fill="both", expand=True)
 
-        # Treeview com colunas fixas: Arquivo + cada campo
-        cols = ["arquivo"] + [c.lower().replace(" ", "_").replace(".", "").replace("/", "_")
-                               for c in COLUNAS]
-        hdrs = ["Arquivo XML"] + COLUNAS
-        wids = [180] + [140] * len(COLUNAS)
+        # Treeview colunas fixas
+        col_ids = ["arquivo"] + [f"c{i}" for i in range(len(COLUNAS))]
+        hdrs    = ["Arquivo XML"] + COLUNAS
+        wids    = [200] + [150] * len(COLUNAS)
 
-        self.tree = ttk.Treeview(right, columns=cols, show="headings", height=25)
-        for c, h, w in zip(cols, hdrs, wids):
-            self.tree.heading(c, text=h)
-            self.tree.column(c, width=w, minwidth=60, anchor="w")
-
-        self._col_ids = cols   # salva para uso posterior
+        self.tree = ttk.Treeview(right, columns=col_ids, show="headings", height=25)
+        for cid, h, w in zip(col_ids, hdrs, wids):
+            self.tree.heading(cid, text=h)
+            self.tree.column(cid, width=w, minwidth=60, anchor="center")
 
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("Treeview", background=SURFACE, foreground=TEXT,
-                        fieldbackground=SURFACE, rowheight=28, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", background=BORDER, foreground=TEXT,
+        style.configure("Treeview",
+                        background=SURFACE, foreground=TEXT,
+                        fieldbackground=SURFACE, rowheight=30,
+                        font=("Segoe UI", 9))
+        style.configure("Treeview.Heading",
+                        background=BORDER, foreground=TEXT,
                         font=("Segoe UI", 9, "bold"))
         style.map("Treeview", background=[("selected", ACCENT)])
 
-        # tags de linha (caso todas as celulas da linha sejam iguais)
-        self.tree.tag_configure("ok",          foreground=SUCCESS)
-        self.tree.tag_configure("erro",        foreground=ERROR)
-        self.tree.tag_configure("vazio_xml",   foreground=WARNING)
-        self.tree.tag_configure("vazio_excel", foreground=INFO)
-        self.tree.tag_configure("vazio_ambos", foreground=GRAY)
-        self.tree.tag_configure("info",        foreground=MUTED)
-        self.tree.tag_configure("misto",       foreground=TEXT)
+        # tags — cada linha recebe a cor do pior status
+        self.tree.tag_configure("ok",          foreground=SUCCESS, background="#1e2e24")
+        self.tree.tag_configure("erro",        foreground=ERROR,   background="#2e1e1e")
+        self.tree.tag_configure("vazio_xml",   foreground=WARNING, background="#2e2718")
+        self.tree.tag_configure("vazio_excel", foreground=INFO,    background="#1a2430")
+        self.tree.tag_configure("vazio_ambos", foreground=GRAY,    background="#232323")
+        self.tree.tag_configure("info",        foreground=MUTED,   background=SURFACE)
+        self.tree.tag_configure("misto",       foreground=TEXT,    background=SURFACE)
 
         sb_x = ttk.Scrollbar(right, orient="horizontal", command=self.tree.xview)
         sb_y = ttk.Scrollbar(right, orient="vertical",   command=self.tree.yview)
         self.tree.configure(xscrollcommand=sb_x.set, yscrollcommand=sb_y.set)
         self.tree.pack(side="left", fill="both", expand=True)
-        sb_y.pack(side="left", fill="y")
+        sb_y.pack(side="left",  fill="y")
         sb_x.pack(side="bottom", fill="x")
 
         self.status_var = tk.StringVar(value="Pronto. Selecione o Excel e os XMLs para comecar.")
@@ -194,7 +194,7 @@ class XMLValidatorApp(tk.Tk):
                          relief="flat", bd=0, font=("Segoe UI", 9),
                          cursor="hand2", pady=8)
 
-    # ── Carregar arquivos ─────────────────────────────────────────────────────
+    # ── Arquivos ──────────────────────────────────────────────────────────────
     def _load_excel(self):
         path = filedialog.askopenfilename(
             title="Selecionar formulario Excel",
@@ -230,7 +230,7 @@ class XMLValidatorApp(tk.Tk):
         self.results.clear()
         self.status_var.set("Limpo. Pronto para nova validacao.")
 
-    # ── Validacao principal ───────────────────────────────────────────────────
+    # ── Validacao ─────────────────────────────────────────────────────────────
     def _run(self):
         try:
             self._run_inner()
@@ -257,68 +257,63 @@ class XMLValidatorApp(tk.Tk):
             messagebox.showerror("Erro ao ler Excel", str(e))
             return
 
-        ok = err = vz_xml = vz_excel = vz_ambos = info = 0
+        ok = err = vz_xml = vz_excel = vz_ambos = info_cnt = 0
+
+        # prioridade para determinar a cor da linha inteira
+        PRIORIDADE = ["erro", "vazio_xml", "vazio_excel", "vazio_ambos", "info", "ok", "misto"]
 
         for xml_path in self.xml_paths:
             fname = os.path.basename(xml_path)
             try:
-                xml_flat = self._read_xml_flat(xml_path)
+                xml_flat   = self._read_xml_flat(xml_path)
+                excel_row  = dados_tabela2[0] if dados_tabela2 else {}
 
-                # Monta dict coluna→(valor_excel, valor_xml, status)
-                # Usa primeira linha da Tabela2 para os campos de itens
-                excel_row = dados_tabela2[0] if dados_tabela2 else {}
-
-                row_valores  = [fname]   # coluna "Arquivo XML"
-                row_statuses = []        # status de cada coluna para colorir
+                row_valores  = [fname]
+                row_tags     = []   # tag de cor de cada celula
 
                 for col in COLUNAS:
                     col_norm = normaliza(col)
-                    tags_xml = MAPA_ITENS.get(col.upper(), MAPA_ITENS.get(
-                        next((k for k in MAPA_ITENS if normaliza(k) == col_norm), col.upper()),
-                        [col]
-                    ))
 
-                    # Pega valor do Excel
-                    # Para CNPJ usa cnpj_excel; para outros busca na Tabela2
+                    # busca tags XML para a coluna
+                    tags_xml = None
+                    for k in MAPA_ITENS:
+                        if normaliza(k) == col_norm:
+                            tags_xml = MAPA_ITENS[k]
+                            break
+                    if tags_xml is None:
+                        tags_xml = [col]
+
+                    # valor do Excel
                     if col_norm == "CNPJ":
                         val_excel = cnpj_excel
-                    elif col_norm == "ART. LC 214/2025":
-                        # busca na tabela2 pela coluna correspondente
+                    elif "ART" in col_norm or "LC 214" in col_norm:
                         val_excel = None
                         for k, v in excel_row.items():
                             if "ART" in normaliza(k) or "LC 214" in normaliza(k):
-                                val_excel = v
-                                break
+                                val_excel = v; break
+                        texto = str(val_excel).strip() if not vazio(val_excel) else "(vazio)"
+                        row_valores.append(texto)
+                        row_tags.append("info")
+                        info_cnt += 1
+                        self.results.append(dict(arquivo=fname, campo=col,
+                                                 esperado=texto, encontrado="—",
+                                                 status="Referencia legal"))
+                        continue
                     else:
                         val_excel = None
                         for k, v in excel_row.items():
                             if normaliza(k) == col_norm:
-                                val_excel = v
-                                break
+                                val_excel = v; break
 
-                    # Art. LC 214/2025 — apenas referencia
-                    if "ART" in col_norm or "LC 214" in col_norm:
-                        texto = str(val_excel).strip() if not vazio(val_excel) else "(vazio)"
-                        row_valores.append(texto)
-                        row_statuses.append("info")
-                        info += 1
-                        self.results.append(dict(
-                            arquivo=fname, campo=col,
-                            esperado=texto, encontrado="—", status="Referencia legal"))
-                        continue
-
-                    # Busca valor no XML
+                    # valor do XML
                     val_xml = self._buscar_tag(xml_flat, tags_xml) if tags_xml else None
 
                     ex_v = vazio(val_excel)
                     xm_v = vazio(val_xml)
 
-                    # CNPJ: compara por raiz
+                    # status
                     if col_norm == "CNPJ" and not ex_v and not xm_v:
-                        if cnpj_raiz(val_excel) == cnpj_raiz(val_xml):
-                            status = "OK (raiz)"
-                        else:
-                            status = "Divergente"
+                        status = "OK (raiz)" if cnpj_raiz(val_excel) == cnpj_raiz(val_xml) else "Divergente"
                     elif ex_v and xm_v:
                         status = "Campo vazio"
                     elif ex_v:
@@ -330,53 +325,47 @@ class XMLValidatorApp(tk.Tk):
                     else:
                         status = "Divergente"
 
-                    # Contadores
+                    # contadores
                     if "OK" in status:            ok += 1
                     elif status == "Divergente":  err += 1
                     elif "no XML" in status:      vz_xml += 1
                     elif "no Excel" in status:    vz_excel += 1
                     elif status == "Campo vazio": vz_ambos += 1
 
-                    tag = COR_TAG.get(status, "misto")
+                    tag = STATUS_TAG.get(status, "misto")
                     row_valores.append(status)
-                    row_statuses.append(tag)
+                    row_tags.append(tag)
+                    self.results.append(dict(arquivo=fname, campo=col,
+                                             esperado=str(val_excel) if not ex_v else "(vazio)",
+                                             encontrado=str(val_xml) if not xm_v else "(vazio)",
+                                             status=status))
 
-                    self.results.append(dict(
-                        arquivo=fname, campo=col,
-                        esperado=str(val_excel) if not ex_v else "(vazio)",
-                        encontrado=str(val_xml) if not xm_v else "(vazio)",
-                        status=status))
-
-                # Define tag da linha (misto se houver divergencias)
-                tags_set = set(row_statuses)
-                if len(tags_set) == 1:
-                    row_tag = tags_set.pop()
-                elif "erro" in tags_set:
-                    row_tag = "erro"
-                else:
-                    row_tag = "misto"
+                # cor da linha = pior status presente
+                row_tag = "misto"
+                for p in PRIORIDADE:
+                    if p in row_tags:
+                        row_tag = p
+                        break
 
                 self.tree.insert("", "end", values=row_valores, tags=(row_tag,))
 
             except Exception as e:
-                import traceback
                 vals = [fname] + [f"Erro: {e}"] + [""] * (len(COLUNAS) - 1)
                 self.tree.insert("", "end", values=vals, tags=("erro",))
                 err += 1
 
-        total = ok + err + vz_xml + vz_excel + vz_ambos + info
+        total = ok + err + vz_xml + vz_excel + vz_ambos + info_cnt
         self.status_var.set(
             f"Validacao concluida  —  {ok} OK  |  {err} Divergentes  |  "
             f"{vz_xml} Vazio XML  |  {vz_excel} Vazio Excel  |  "
-            f"{vz_ambos} Vazio Ambos  |  {info} Referencias  "
+            f"{vz_ambos} Vazio Ambos  |  {info_cnt} Referencias  "
             f"[{len(self.xml_paths)} arquivo(s)]")
 
-    # ── Leitura do Excel ──────────────────────────────────────────────────────
+    # ── Excel ─────────────────────────────────────────────────────────────────
     def _read_excel(self, path):
         wb = openpyxl.load_workbook(path, data_only=True)
         cnpj_excel = ""
         itens      = []
-
         for ws in wb.worksheets:
             for tbl in ws.tables.values():
                 nome = tbl.displayName or tbl.name or ""
@@ -389,7 +378,6 @@ class XMLValidatorApp(tk.Tk):
                                 break
                 elif nome == "Tabela2":
                     itens = self._ler_tabela(ws, tbl)
-
         wb.close()
         return cnpj_excel, itens
 
@@ -408,7 +396,7 @@ class XMLValidatorApp(tk.Tk):
                 result.append(d)
         return result
 
-    # ── Leitura do XML ────────────────────────────────────────────────────────
+    # ── XML ───────────────────────────────────────────────────────────────────
     def _read_xml_flat(self, path):
         tree = ET.parse(path)
         root = tree.getroot()
@@ -429,7 +417,6 @@ class XMLValidatorApp(tk.Tk):
         for child in element:
             self._flatten(child, key, data)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
     def _buscar_tag(self, xml_flat, tags):
         for t in tags:
             if t in xml_flat:
@@ -465,24 +452,16 @@ class XMLValidatorApp(tk.Tk):
 
     def _export_excel(self, path):
         from openpyxl.styles import PatternFill, Font, Alignment
+        from collections import defaultdict
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Resultado"
-
-        # Cabecalho
-        cabecalho = ["Arquivo XML"] + COLUNAS
-        ws.append(cabecalho)
+        ws.append(["Arquivo XML"] + COLUNAS)
         hdr_fill = PatternFill("solid", fgColor="7C6AF7")
         for cell in ws[1]:
             cell.fill = hdr_fill
             cell.font = Font(bold=True, color="FFFFFF")
             cell.alignment = Alignment(horizontal="center")
-
-        # Agrupa resultados por arquivo
-        from collections import defaultdict
-        por_arquivo = defaultdict(dict)
-        for r in self.results:
-            por_arquivo[r["arquivo"]][r["campo"]] = r["status"]
 
         fill_map = {
             "OK":                   PatternFill("solid", fgColor="D6F5E3"),
@@ -494,14 +473,16 @@ class XMLValidatorApp(tk.Tk):
             "Referencia legal":     PatternFill("solid", fgColor="EFEFFA"),
         }
 
+        por_arquivo = defaultdict(dict)
+        for r in self.results:
+            por_arquivo[r["arquivo"]][r["campo"]] = r["status"]
+
         for arquivo, campos in por_arquivo.items():
-            row_data = [arquivo] + [campos.get(c, "") for c in COLUNAS]
-            ws.append(row_data)
+            ws.append([arquivo] + [campos.get(c, "") for c in COLUNAS])
             row_idx = ws.max_row
             for col_idx, col in enumerate(COLUNAS, start=2):
-                status = campos.get(col, "")
-                cell   = ws.cell(row=row_idx, column=col_idx)
-                cell.fill = fill_map.get(status, PatternFill())
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.fill = fill_map.get(campos.get(col, ""), PatternFill())
 
         for col in ws.columns:
             ws.column_dimensions[col[0].column_letter].width = 22
@@ -513,7 +494,6 @@ class XMLValidatorApp(tk.Tk):
         por_arquivo = defaultdict(dict)
         for r in self.results:
             por_arquivo[r["arquivo"]][r["campo"]] = r["status"]
-
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["Arquivo XML"] + COLUNAS)
