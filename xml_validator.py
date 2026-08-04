@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import openpyxl
 import os
 import re
+import unicodedata
 
 BG      = "#1e1e2e"
 SURFACE = "#2a2a3d"
@@ -16,23 +17,13 @@ ERROR   = "#f06060"
 WARNING = "#f0b060"
 BORDER  = "#3a3a55"
 
-# ── Mapeamento coluna Excel → tags XML ──────────────────────────────────────
-# TabelaResumoCadastro: apenas CNPJ e Regime Tributario comparados com XML
-MAPA_CADASTRO = {
-    "CNPJ":              ["emit/CNPJ", "CNPJ"],
-    "REGIME TRIBUTARIO": ["emit/CRT", "CRT"],
-    "INSCRICAO ESTADUAL":["emit/IE", "IE"],
-    "INSCRICAO MUNICIPAL":["emit/IM", "IM"],
-    "CNAE PRINCIPAL":    ["emit/CNAE", "CNAE"],
-}
-
-# Tabela2: itens da nota
+# Mapeamento Tabela2: coluna Excel → tags XML
 MAPA_ITENS = {
+    "TIPO":                    ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
     "NCM/NBS":                 ["NCM", "NBS", "det/prod/NCM", "det/serv/NBS"],
     "NCM":                     ["NCM", "det/prod/NCM"],
     "NBS":                     ["NBS", "det/serv/NBS"],
     "DESCRICAO":               ["xProd", "xDescServ", "det/prod/xProd", "det/serv/xDescServ"],
-    "DESCRICAO":               ["xProd", "xDescServ"],
     "CST":                     ["CST", "CSOSN",
                                 "det/imposto/ICMS/ICMS00/CST",
                                 "det/imposto/ICMS/ICMSSN102/CSOSN",
@@ -42,19 +33,7 @@ MAPA_ITENS = {
     "CCREDPRES":               ["cCredPres",  "det/imposto/cCredPres"],
     "CCLASSTRIB OU CCREDPRES": ["cClassTrib", "cCredPres",
                                 "det/imposto/cClassTrib", "det/imposto/cCredPres"],
-    "TIPO":                    ["det/prod/xProd", "det/serv/xDescServ"],
     "ART. LC 214/2025":        [],  # apenas referencia
-}
-
-# Colunas da TabelaResumoCadastro que NAO existem no XML (so cadastrais)
-COLUNAS_APENAS_CADASTRAIS = {
-    "RAZAO SOCIAL", "NOME FANTASIA", "ENDERECO COMPLETO", "TELEFONE",
-    "E-MAIL PARA CONTATO", "RESPONSAVEL PELO PREENCHIMENTO",
-    "CNAES SECUNDARIOS", "NATUREZA JURIDICA", "SITUACAO FISCAL ATUAL",
-    "ESPECIFICAR OUTROS", "OPTANTE SIMPLES NACIONAL",
-    "POSSUI BENEFICIOS FISCAIS VIGENTES", "ESPECIFICAR BENEFICIOS",
-    "REGIME DIFERENCIADO CFE. ART. 126 LC 214/2025",
-    "FORMA DE RECOLHIMENTO CBS/IBS",
 }
 
 def normaliza_cnpj(v):
@@ -64,8 +43,6 @@ def cnpj_raiz(v):
     return normaliza_cnpj(v)[:8]
 
 def normaliza(v):
-    # remove acentos simples para comparacao
-    import unicodedata
     s = str(v or "").strip().upper()
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
@@ -73,7 +50,7 @@ def normaliza(v):
 class XMLValidatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("XML Validator  v2.2")
+        self.title("XML Validator  v2.3")
         self.geometry("1150x720")
         self.minsize(900, 580)
         self.configure(bg=BG)
@@ -138,12 +115,12 @@ class XMLValidatorApp(tk.Tk):
             tk.Label(f, text=label, font=("Segoe UI", 8), bg=SURFACE, fg=MUTED).pack()
             setattr(self, attr, lv)
 
-        cols = ("arquivo", "tabela", "campo", "esperado", "encontrado", "status")
+        cols = ("arquivo", "campo", "esperado", "encontrado", "status")
         self.tree = ttk.Treeview(right, columns=cols, show="headings", height=22)
         for c, h, w in zip(cols,
-                           ("Arquivo XML", "Tabela", "Campo",
+                           ("Arquivo XML", "Campo",
                             "Esperado (Excel)", "Encontrado (XML)", "Status"),
-                           (160, 120, 160, 170, 170, 110)):
+                           (200, 180, 200, 200, 120)):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=w, minwidth=50, anchor="w")
 
@@ -158,7 +135,6 @@ class XMLValidatorApp(tk.Tk):
         self.tree.tag_configure("erro",    foreground=ERROR)
         self.tree.tag_configure("missing", foreground=WARNING)
         self.tree.tag_configure("info",    foreground=MUTED)
-        self.tree.tag_configure("skip",    foreground=MUTED)
 
         sb = ttk.Scrollbar(right, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
@@ -241,16 +217,9 @@ class XMLValidatorApp(tk.Tk):
         self.update_idletasks()
 
         try:
-            cadastro, itens = self._read_excel(self._excel_full_path)
+            cnpj_excel, itens = self._read_excel(self._excel_full_path)
         except Exception as e:
             messagebox.showerror("Erro ao ler Excel", str(e))
-            return
-
-        if cadastro is None:
-            messagebox.showerror(
-                "Tabela nao encontrada",
-                "Nao foi possivel encontrar 'TabelaResumoCadastro' no Excel.\n"
-                "Verifique se o nome da tabela esta correto.")
             return
 
         ok = err = warn = info = 0
@@ -260,73 +229,42 @@ class XMLValidatorApp(tk.Tk):
             try:
                 xml_flat = self._read_xml_flat(xml_path)
 
-                # ── TabelaResumoCadastro ───────────────────────────────────
-                for col, valor_excel in cadastro.items():
-                    col_norm = normaliza(col)
-
-                    # Campos apenas cadastrais - exibe como Info, sem comparar
-                    if col_norm in COLUNAS_APENAS_CADASTRAIS:
-                        if valor_excel and str(valor_excel).strip():
-                            self._add_row(fname, "TabelaResumoCadastro", col,
-                                          str(valor_excel), "—", "Apenas cadastral", "skip")
-                            info += 1
-                        continue
-
-                    # CNPJ: compara por raiz (8 digitos)
-                    if col_norm == "CNPJ":
-                        cnpj_xml   = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
-                        raiz_excel = cnpj_raiz(str(valor_excel or ""))
-                        raiz_xml   = cnpj_raiz(cnpj_xml) if cnpj_xml else ""
-                        if not valor_excel or not str(valor_excel).strip():
-                            continue
-                        if not cnpj_xml:
-                            status, tag = "Ausente", "missing"; warn += 1
-                        elif raiz_excel == raiz_xml:
-                            status, tag = "OK (raiz)", "ok"; ok += 1
-                        else:
-                            status, tag = "Divergente", "erro"; err += 1
-                        self._add_row(fname, "TabelaResumoCadastro", col,
-                                      str(valor_excel), cnpj_xml or "-", status, tag)
-                        continue
-
-                    # Outros campos mapeados
-                    tags = self._resolver_tags_cadastro(col_norm)
-                    if not tags:
-                        continue
-                    if not valor_excel or str(valor_excel).strip() == "":
-                        continue
-
-                    valor_xml = self._buscar_tag(xml_flat, tags)
-                    if valor_xml is None:
+                # ── 1. Validar CNPJ (TabelaResumoCadastro) ────────────────
+                if cnpj_excel:
+                    cnpj_xml   = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
+                    raiz_excel = cnpj_raiz(cnpj_excel)
+                    raiz_xml   = cnpj_raiz(cnpj_xml) if cnpj_xml else ""
+                    if not cnpj_xml:
                         status, tag = "Ausente", "missing"; warn += 1
-                    elif normaliza(valor_xml) == normaliza(valor_excel):
-                        status, tag = "OK", "ok"; ok += 1
+                    elif raiz_excel == raiz_xml:
+                        status, tag = "OK (raiz)", "ok"; ok += 1
                     else:
                         status, tag = "Divergente", "erro"; err += 1
-                    self._add_row(fname, "TabelaResumoCadastro", col,
-                                  str(valor_excel), str(valor_xml) if valor_xml else "-",
-                                  status, tag)
+                    self._add_row(fname, "CNPJ", cnpj_excel,
+                                  cnpj_xml or "-", status, tag)
 
-                # ── Tabela2: itens ─────────────────────────────────────────
+                # ── 2. Validar itens (Tabela2) ────────────────────────────
                 for row in itens:
                     for col, valor_excel in row.items():
                         col_norm = normaliza(col)
 
+                        # Art. LC 214/2025 — referencia, nao compara
                         if "ART." in col_norm or "LC 214" in col_norm:
                             if valor_excel and str(valor_excel).strip():
-                                self._add_row(fname, "Tabela2", col,
+                                self._add_row(fname, col,
                                               str(valor_excel), "—",
                                               "Referencia legal", "info")
                                 info += 1
                             continue
 
-                        tags = self._resolver_tags_itens(col_norm)
+                        tags = self._resolver_tags(col_norm)
                         if not tags:
                             continue
                         if valor_excel is None or str(valor_excel).strip() == "":
                             continue
 
                         valor_xml = self._buscar_tag(xml_flat, tags)
+
                         if valor_xml is None:
                             status, tag = "Ausente", "missing"; warn += 1
                         elif normaliza(valor_xml) == normaliza(valor_excel):
@@ -334,15 +272,13 @@ class XMLValidatorApp(tk.Tk):
                         else:
                             status, tag = "Divergente", "erro"; err += 1
 
-                        self._add_row(fname, "Tabela2", col,
+                        self._add_row(fname, col,
                                       str(valor_excel),
                                       str(valor_xml) if valor_xml else "-",
                                       status, tag)
 
             except Exception as e:
-                import traceback
-                self._add_row(fname, "-", "-", "-",
-                              f"Erro: {e}", "Falha", "erro")
+                self._add_row(fname, "-", "-", f"Erro: {e}", "Falha", "erro")
                 err += 1
 
         self._update_summary(ok + err + warn + info, ok, err, warn, info)
@@ -350,42 +286,45 @@ class XMLValidatorApp(tk.Tk):
             f"Validacao concluida  —  {ok} OK  |  {err} Divergentes  |  "
             f"{warn} Ausentes  |  {info} Informacoes")
 
-    def _add_row(self, arquivo, tabela, campo, esperado, encontrado, status, tag):
+    def _add_row(self, arquivo, campo, esperado, encontrado, status, tag):
         self.tree.insert("", "end",
-                         values=(arquivo, tabela, campo, esperado, encontrado, status),
+                         values=(arquivo, campo, esperado, encontrado, status),
                          tags=(tag,))
-        self.results.append(dict(arquivo=arquivo, tabela=tabela, campo=campo,
+        self.results.append(dict(arquivo=arquivo, campo=campo,
                                  esperado=esperado, encontrado=encontrado,
                                  status=status))
 
-    # ── Leitura do Excel por nome de tabela ───────────────────────────────────
+    # ── Leitura do Excel ──────────────────────────────────────────────────────
     def _read_excel(self, path):
+        """Retorna (cnpj_str, lista_de_dicts_tabela2)."""
         wb = openpyxl.load_workbook(path, data_only=True)
 
-        cadastro = None
-        itens    = []
+        cnpj_excel = ""
+        itens      = []
 
         for ws in wb.worksheets:
             for tbl in ws.tables.values():
                 nome = tbl.displayName or tbl.name or ""
 
-                # ── TabelaResumoCadastro ──────────────────────────────────
                 if nome == "TabelaResumoCadastro":
                     dados = self._ler_tabela(ws, tbl)
-                    # pega primeira linha de dados (um unico fornecedor)
-                    cadastro = dados[0] if dados else {}
+                    if dados:
+                        # pega so o CNPJ da primeira linha
+                        primeira = dados[0]
+                        for k, v in primeira.items():
+                            if normaliza(k) == "CNPJ" and v:
+                                cnpj_excel = str(v).strip()
+                                break
 
-                # ── Tabela2 ───────────────────────────────────────────────
                 elif nome == "Tabela2":
                     itens = self._ler_tabela(ws, tbl)
 
         wb.close()
-        return cadastro, itens
+        return cnpj_excel, itens
 
     def _ler_tabela(self, ws, tbl):
-        """Le todas as linhas de uma tabela Excel e retorna lista de dicts."""
-        ref   = tbl.ref          # ex: "A1:T10"
-        rng   = ws[ref]          # tupla de tuplas de celulas
+        ref   = tbl.ref
+        rng   = ws[ref]
         rows  = [[cell.value for cell in row] for row in rng]
         if not rows:
             return []
@@ -421,17 +360,11 @@ class XMLValidatorApp(tk.Tk):
             self._flatten(child, key, data)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
-    def _resolver_tags_cadastro(self, col_norm):
-        for k, v in MAPA_CADASTRO.items():
-            if normaliza(k) == col_norm:
-                return v
-        return []
-
-    def _resolver_tags_itens(self, col_norm):
+    def _resolver_tags(self, col_norm):
         for k, v in MAPA_ITENS.items():
             if normaliza(k) == col_norm:
                 return v
-        return [col_norm]   # fallback
+        return [col_norm]  # fallback: usa o proprio nome como tag
 
     def _buscar_tag(self, xml_flat, tags):
         for t in tags:
@@ -479,7 +412,7 @@ class XMLValidatorApp(tk.Tk):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Resultado"
-        ws.append(["Arquivo XML", "Tabela", "Campo",
+        ws.append(["Arquivo XML", "Campo",
                    "Esperado (Excel)", "Encontrado (XML)", "Status"])
         hdr_fill = PatternFill("solid", fgColor="7C6AF7")
         for cell in ws[1]:
@@ -491,13 +424,12 @@ class XMLValidatorApp(tk.Tk):
         fill_warn = PatternFill("solid", fgColor="FFF0CC")
         fill_info = PatternFill("solid", fgColor="E8E8F0")
         for r in self.results:
-            ws.append([r["arquivo"], r["tabela"], r["campo"],
+            ws.append([r["arquivo"], r["campo"],
                        r["esperado"], r["encontrado"], r["status"]])
             s    = r["status"]
-            fill = (fill_ok   if "OK"         in s else
-                    fill_err  if "Divergente" in s or "Falha" in s else
-                    fill_info if s in ("Referencia legal", "Apenas cadastral") else
-                    fill_warn)
+            fill = (fill_ok   if "OK"              in s else
+                    fill_err  if "Divergente"      in s or "Falha" in s else
+                    fill_info if "Referencia legal" in s else fill_warn)
             for cell in ws[ws.max_row]:
                 cell.fill = fill
         for col in ws.columns:
@@ -508,7 +440,7 @@ class XMLValidatorApp(tk.Tk):
         import csv
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["arquivo", "tabela", "campo",
+                f, fieldnames=["arquivo", "campo",
                                "esperado", "encontrado", "status"])
             writer.writeheader()
             writer.writerows(self.results)
