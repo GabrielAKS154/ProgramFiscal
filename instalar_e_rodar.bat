@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo  XML Validator - Instalacao e Execucao
+echo  XML Validator - INSTALACAO (so uma vez!)
 echo ============================================
 echo.
 echo Verificando Python...
@@ -17,6 +17,8 @@ echo.
 echo Instalando dependencias...
 pip install openpyxl
 echo.
-echo Iniciando XML Validator...
-python xml_validator.py
+echo ============================================
+echo  Instalacao concluida com sucesso!
+echo  Da proxima vez, use apenas: RODAR.bat
+echo ============================================
 pause
