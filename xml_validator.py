@@ -159,15 +159,7 @@ class XMLValidatorApp(tk.Tk):
         style.configure("Treeview.Heading",
                         background=BORDER, foreground=TEXT,
                         font=("Segoe UI", 9, "bold"))
-                # --- Correção do bug que faz o Treeview ignorar as cores das tags ---
-        def fixed_map(option):
-            return [e for e in style.map("Treeview", query_opt=option)
-                    if e[:2] != ("!disabled", "!selected")]
-
-        style.map("Treeview",
-                  foreground=fixed_map("foreground"),
-                  background=fixed_map("background"),
-                  fieldbackground=[("selected", ACCENT)])
+             style.map("Treeview", background=[("selected", ACCENT)])
 
         # tags — cada linha recebe a cor do pior status
         self.tree.tag_configure("ok",          foreground=SUCCESS, background="#1e2e24")
