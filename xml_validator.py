@@ -16,6 +16,8 @@ SUCCESS = "#4caf82"
 ERROR   = "#f06060"
 WARNING = "#f0b060"
 BORDER  = "#3a3a55"
+INFO    = "#6ab0f5"
+GRAY    = "#aaaaaa"
 
 # Mapeamento Tabela2: coluna Excel → tags XML
 MAPA_ITENS = {
@@ -33,7 +35,7 @@ MAPA_ITENS = {
     "CCREDPRES":               ["cCredPres",  "det/imposto/cCredPres"],
     "CCLASSTRIB OU CCREDPRES": ["cClassTrib", "cCredPres",
                                 "det/imposto/cClassTrib", "det/imposto/cCredPres"],
-    "ART. LC 214/2025":        [],  # apenas referencia
+    "ART. LC 214/2025":        [],  # apenas referencia legal
 }
 
 def normaliza_cnpj(v):
@@ -46,12 +48,15 @@ def normaliza(v):
     s = str(v or "").strip().upper()
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
+def vazio(v):
+    return v is None or str(v).strip() == ""
+
 
 class XMLValidatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("XML Validator  v2.3")
-        self.geometry("1150x720")
+        self.title("XML Validator  v2.4")
+        self.geometry("1200x720")
         self.minsize(900, 580)
         self.configure(bg=BG)
         self.excel_path       = tk.StringVar(value="Nenhum arquivo selecionado")
@@ -86,7 +91,7 @@ class XMLValidatorApp(tk.Tk):
         self._btn(left, "Adicionar XMLs", self._load_xmls).pack(fill="x", pady=(0, 4))
         self.xml_listbox = tk.Listbox(left, bg=SURFACE, fg=TEXT, selectbackground=ACCENT,
                                       relief="flat", bd=0, font=("Segoe UI", 8),
-                                      height=8, highlightthickness=1,
+                                      height=7, highlightthickness=1,
                                       highlightbackground=BORDER)
         self.xml_listbox.pack(fill="x", pady=(0, 4))
         self._btn(left, "Remover selecionado", self._remove_xml, color=SURFACE).pack(fill="x")
@@ -97,22 +102,40 @@ class XMLValidatorApp(tk.Tk):
         self._btn(left, "Exportar relatorio", self._export, color=ACCENT2).pack(fill="x", pady=(0, 4))
         self._btn(left, "Limpar tudo", self._clear, color=SURFACE).pack(fill="x")
 
+        self._sep(left)
+        self._section(left, "Legenda")
+        for cor, txt in [
+            (SUCCESS, "OK"),
+            (ERROR,   "Divergente"),
+            (WARNING, "Campo vazio no XML"),
+            (INFO,    "Campo vazio no Excel"),
+            (GRAY,    "Campo vazio (ambos)"),
+            (MUTED,   "Referencia legal"),
+        ]:
+            row = tk.Frame(left, bg=BG)
+            row.pack(anchor="w", pady=1)
+            tk.Frame(row, bg=cor, width=12, height=12).pack(side="left", padx=(0, 6))
+            tk.Label(row, text=txt, bg=BG, fg=TEXT, font=("Segoe UI", 8)).pack(side="left")
+
         right = tk.Frame(body, bg=BG)
         right.pack(side="left", fill="both", expand=True)
 
         self.summary_frame = tk.Frame(right, bg=SURFACE, pady=10)
         self.summary_frame.pack(fill="x", pady=(0, 10))
         for label, attr, color in [
-            ("Total",      "lbl_total", TEXT),
-            ("OK",         "lbl_ok",    SUCCESS),
-            ("Divergente", "lbl_err",   ERROR),
-            ("Ausente",    "lbl_warn",  WARNING),
-            ("Info",       "lbl_info",  MUTED)]:
+            ("Total",          "lbl_total",       TEXT),
+            ("OK",             "lbl_ok",          SUCCESS),
+            ("Divergente",     "lbl_err",         ERROR),
+            ("Vazio XML",      "lbl_vazio_xml",   WARNING),
+            ("Vazio Excel",    "lbl_vazio_excel", INFO),
+            ("Vazio Ambos",    "lbl_vazio_ambos", GRAY),
+            ("Referencia",     "lbl_info",        MUTED),
+        ]:
             f = tk.Frame(self.summary_frame, bg=SURFACE)
             f.pack(side="left", expand=True)
-            lv = tk.Label(f, text="0", font=("Segoe UI", 20, "bold"), bg=SURFACE, fg=color)
+            lv = tk.Label(f, text="0", font=("Segoe UI", 16, "bold"), bg=SURFACE, fg=color)
             lv.pack()
-            tk.Label(f, text=label, font=("Segoe UI", 8), bg=SURFACE, fg=MUTED).pack()
+            tk.Label(f, text=label, font=("Segoe UI", 7), bg=SURFACE, fg=MUTED).pack()
             setattr(self, attr, lv)
 
         cols = ("arquivo", "campo", "esperado", "encontrado", "status")
@@ -120,7 +143,7 @@ class XMLValidatorApp(tk.Tk):
         for c, h, w in zip(cols,
                            ("Arquivo XML", "Campo",
                             "Esperado (Excel)", "Encontrado (XML)", "Status"),
-                           (200, 180, 200, 200, 120)):
+                           (200, 200, 180, 180, 170)):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=w, minwidth=50, anchor="w")
 
@@ -131,10 +154,12 @@ class XMLValidatorApp(tk.Tk):
         style.configure("Treeview.Heading", background=BORDER, foreground=TEXT,
                         font=("Segoe UI", 9, "bold"))
         style.map("Treeview", background=[("selected", ACCENT)])
-        self.tree.tag_configure("ok",      foreground=SUCCESS)
-        self.tree.tag_configure("erro",    foreground=ERROR)
-        self.tree.tag_configure("missing", foreground=WARNING)
-        self.tree.tag_configure("info",    foreground=MUTED)
+        self.tree.tag_configure("ok",          foreground=SUCCESS)
+        self.tree.tag_configure("erro",        foreground=ERROR)
+        self.tree.tag_configure("vazio_xml",   foreground=WARNING)
+        self.tree.tag_configure("vazio_excel", foreground=INFO)
+        self.tree.tag_configure("vazio_ambos", foreground=GRAY)
+        self.tree.tag_configure("info",        foreground=MUTED)
 
         sb = ttk.Scrollbar(right, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
@@ -222,69 +247,85 @@ class XMLValidatorApp(tk.Tk):
             messagebox.showerror("Erro ao ler Excel", str(e))
             return
 
-        ok = err = warn = info = 0
+        ok = err = vazio_xml = vazio_excel = vazio_ambos = info = 0
 
         for xml_path in self.xml_paths:
             fname = os.path.basename(xml_path)
             try:
                 xml_flat = self._read_xml_flat(xml_path)
 
-                # ── 1. Validar CNPJ (TabelaResumoCadastro) ────────────────
-                if cnpj_excel:
-                    cnpj_xml   = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
-                    raiz_excel = cnpj_raiz(cnpj_excel)
-                    raiz_xml   = cnpj_raiz(cnpj_xml) if cnpj_xml else ""
-                    if not cnpj_xml:
-                        status, tag = "Ausente", "missing"; warn += 1
-                    elif raiz_excel == raiz_xml:
-                        status, tag = "OK (raiz)", "ok"; ok += 1
-                    else:
-                        status, tag = "Divergente", "erro"; err += 1
-                    self._add_row(fname, "CNPJ", cnpj_excel,
-                                  cnpj_xml or "-", status, tag)
+                # ── 1. CNPJ da TabelaResumoCadastro ───────────────────────
+                cnpj_xml = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
+                ex_v = vazio(cnpj_excel)
+                xm_v = vazio(cnpj_xml)
 
-                # ── 2. Validar itens (Tabela2) ────────────────────────────
+                if ex_v and xm_v:
+                    status, tag = "Campo vazio", "vazio_ambos"; vazio_ambos += 1
+                elif ex_v:
+                    status, tag = "Campo vazio no Excel", "vazio_excel"; vazio_excel += 1
+                elif xm_v:
+                    status, tag = "Campo vazio no XML", "vazio_xml"; vazio_xml += 1
+                elif cnpj_raiz(cnpj_excel) == cnpj_raiz(cnpj_xml):
+                    status, tag = "OK (raiz)", "ok"; ok += 1
+                else:
+                    status, tag = "Divergente", "erro"; err += 1
+
+                self._add_row(fname, "CNPJ",
+                              cnpj_excel or "(vazio)",
+                              cnpj_xml   or "(vazio)",
+                              status, tag)
+
+                # ── 2. Todas as colunas da Tabela2 ────────────────────────
                 for row in itens:
                     for col, valor_excel in row.items():
                         col_norm = normaliza(col)
 
-                        # Art. LC 214/2025 — referencia, nao compara
+                        # Art. LC 214/2025 — apenas referencia, nao compara
                         if "ART." in col_norm or "LC 214" in col_norm:
-                            if valor_excel and str(valor_excel).strip():
+                            if not vazio(valor_excel):
                                 self._add_row(fname, col,
                                               str(valor_excel), "—",
                                               "Referencia legal", "info")
                                 info += 1
                             continue
 
-                        tags = self._resolver_tags(col_norm)
-                        if not tags:
-                            continue
-                        if valor_excel is None or str(valor_excel).strip() == "":
-                            continue
+                        tags      = self._resolver_tags(col_norm)
+                        valor_xml = self._buscar_tag(xml_flat, tags) if tags else None
 
-                        valor_xml = self._buscar_tag(xml_flat, tags)
+                        ex_v = vazio(valor_excel)
+                        xm_v = vazio(valor_xml)
 
-                        if valor_xml is None:
-                            status, tag = "Ausente", "missing"; warn += 1
+                        if ex_v and xm_v:
+                            status, tag = "Campo vazio", "vazio_ambos"
+                            vazio_ambos += 1
+                        elif ex_v:
+                            status, tag = "Campo vazio no Excel", "vazio_excel"
+                            vazio_excel += 1
+                        elif xm_v:
+                            status, tag = "Campo vazio no XML", "vazio_xml"
+                            vazio_xml += 1
                         elif normaliza(valor_xml) == normaliza(valor_excel):
-                            status, tag = "OK", "ok"; ok += 1
+                            status, tag = "OK", "ok"
+                            ok += 1
                         else:
-                            status, tag = "Divergente", "erro"; err += 1
+                            status, tag = "Divergente", "erro"
+                            err += 1
 
                         self._add_row(fname, col,
-                                      str(valor_excel),
-                                      str(valor_xml) if valor_xml else "-",
+                                      str(valor_excel) if not ex_v else "(vazio)",
+                                      str(valor_xml)   if not xm_v else "(vazio)",
                                       status, tag)
 
             except Exception as e:
                 self._add_row(fname, "-", "-", f"Erro: {e}", "Falha", "erro")
                 err += 1
 
-        self._update_summary(ok + err + warn + info, ok, err, warn, info)
+        total = ok + err + vazio_xml + vazio_excel + vazio_ambos + info
+        self._update_summary(total, ok, err, vazio_xml, vazio_excel, vazio_ambos, info)
         self.status_var.set(
             f"Validacao concluida  —  {ok} OK  |  {err} Divergentes  |  "
-            f"{warn} Ausentes  |  {info} Informacoes")
+            f"{vazio_xml} Vazio XML  |  {vazio_excel} Vazio Excel  |  "
+            f"{vazio_ambos} Vazio Ambos  |  {info} Referencias")
 
     def _add_row(self, arquivo, campo, esperado, encontrado, status, tag):
         self.tree.insert("", "end",
@@ -296,26 +337,20 @@ class XMLValidatorApp(tk.Tk):
 
     # ── Leitura do Excel ──────────────────────────────────────────────────────
     def _read_excel(self, path):
-        """Retorna (cnpj_str, lista_de_dicts_tabela2)."""
         wb = openpyxl.load_workbook(path, data_only=True)
-
         cnpj_excel = ""
         itens      = []
 
         for ws in wb.worksheets:
             for tbl in ws.tables.values():
                 nome = tbl.displayName or tbl.name or ""
-
                 if nome == "TabelaResumoCadastro":
                     dados = self._ler_tabela(ws, tbl)
                     if dados:
-                        # pega so o CNPJ da primeira linha
-                        primeira = dados[0]
-                        for k, v in primeira.items():
-                            if normaliza(k) == "CNPJ" and v:
-                                cnpj_excel = str(v).strip()
+                        for k, v in dados[0].items():
+                            if normaliza(k) == "CNPJ":
+                                cnpj_excel = str(v).strip() if not vazio(v) else ""
                                 break
-
                 elif nome == "Tabela2":
                     itens = self._ler_tabela(ws, tbl)
 
@@ -323,9 +358,8 @@ class XMLValidatorApp(tk.Tk):
         return cnpj_excel, itens
 
     def _ler_tabela(self, ws, tbl):
-        ref   = tbl.ref
-        rng   = ws[ref]
-        rows  = [[cell.value for cell in row] for row in rng]
+        rng     = ws[tbl.ref]
+        rows    = [[cell.value for cell in row] for row in rng]
         if not rows:
             return []
         headers = [str(h).strip() if h is not None else "" for h in rows[0]]
@@ -364,7 +398,7 @@ class XMLValidatorApp(tk.Tk):
         for k, v in MAPA_ITENS.items():
             if normaliza(k) == col_norm:
                 return v
-        return [col_norm]  # fallback: usa o proprio nome como tag
+        return [col_norm]
 
     def _buscar_tag(self, xml_flat, tags):
         for t in tags:
@@ -379,11 +413,14 @@ class XMLValidatorApp(tk.Tk):
         return None
 
     # ── Resumo ────────────────────────────────────────────────────────────────
-    def _update_summary(self, total=0, ok=0, err=0, warn=0, info=0):
+    def _update_summary(self, total=0, ok=0, err=0,
+                        vazio_xml=0, vazio_excel=0, vazio_ambos=0, info=0):
         self.lbl_total.config(text=str(total))
         self.lbl_ok.config(text=str(ok))
         self.lbl_err.config(text=str(err))
-        self.lbl_warn.config(text=str(warn))
+        self.lbl_vazio_xml.config(text=str(vazio_xml))
+        self.lbl_vazio_excel.config(text=str(vazio_excel))
+        self.lbl_vazio_ambos.config(text=str(vazio_ambos))
         self.lbl_info.config(text=str(info))
 
     # ── Exportar ──────────────────────────────────────────────────────────────
@@ -419,21 +456,32 @@ class XMLValidatorApp(tk.Tk):
             cell.fill = hdr_fill
             cell.font = Font(bold=True, color="FFFFFF")
             cell.alignment = Alignment(horizontal="center")
-        fill_ok   = PatternFill("solid", fgColor="D6F5E3")
-        fill_err  = PatternFill("solid", fgColor="FAD7D7")
-        fill_warn = PatternFill("solid", fgColor="FFF0CC")
-        fill_info = PatternFill("solid", fgColor="E8E8F0")
+        fill_ok          = PatternFill("solid", fgColor="D6F5E3")
+        fill_err         = PatternFill("solid", fgColor="FAD7D7")
+        fill_vazio_xml   = PatternFill("solid", fgColor="FFF0CC")
+        fill_vazio_excel = PatternFill("solid", fgColor="D0E8FF")
+        fill_vazio_ambos = PatternFill("solid", fgColor="E0E0E0")
+        fill_info        = PatternFill("solid", fgColor="EFEFFA")
         for r in self.results:
             ws.append([r["arquivo"], r["campo"],
                        r["esperado"], r["encontrado"], r["status"]])
-            s    = r["status"]
-            fill = (fill_ok   if "OK"              in s else
-                    fill_err  if "Divergente"      in s or "Falha" in s else
-                    fill_info if "Referencia legal" in s else fill_warn)
+            s = r["status"]
+            if "OK" in s:
+                fill = fill_ok
+            elif "Divergente" in s or "Falha" in s:
+                fill = fill_err
+            elif s == "Campo vazio":
+                fill = fill_vazio_ambos
+            elif "Campo vazio no XML" in s:
+                fill = fill_vazio_xml
+            elif "Campo vazio no Excel" in s:
+                fill = fill_vazio_excel
+            else:
+                fill = fill_info
             for cell in ws[ws.max_row]:
                 cell.fill = fill
         for col in ws.columns:
-            ws.column_dimensions[col[0].column_letter].width = 26
+            ws.column_dimensions[col[0].column_letter].width = 28
         wb.save(path)
 
     def _export_csv(self, path):
