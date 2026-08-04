@@ -16,26 +16,26 @@ ERROR   = "#f06060"
 WARNING = "#f0b060"
 BORDER  = "#3a3a55"
 
-# ─── Mapeamento: nome da coluna Excel → tags possíveis no XML ───────────────
+# Mapeamento: nome da coluna Excel → tags possiveis no XML
 MAPA_CAMPOS = {
-    # Aba 1 - dados cadastrais
-    "CNPJ":                     ["emit/CNPJ", "CNPJ"],
-    # Aba 2 - itens
-    "TIPO":                     ["det/prod/xProd", "det/serv/xDescServ"],
-    "NCM/NBS":                  ["det/prod/NCM", "det/serv/NBS", "NCM", "NBS"],
-    "DESCRICAO":                ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
-    "DESCRIÇÃO":                ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
-    "CST":                      ["det/imposto/ICMS/ICMS00/CST",
-                                 "det/imposto/ICMS/ICMSSN102/CSOSN",
-                                 "det/imposto/PIS/PISAliq/CST",
-                                 "det/imposto/COFINS/COFINSAliq/CST",
-                                 "CST", "CSOSN"],
-    "CCLASSTRIB":               ["det/imposto/cClassTrib", "cClassTrib"],
-    "CCREDPRES":                ["det/imposto/cCredPres", "cCredPres"],
-    "CCLASSTRIB OU CCREDPRES":  ["det/imposto/cClassTrib", "cClassTrib",
-                                 "det/imposto/cCredPres", "cCredPres"],
-    "ART. LC 214/2025":         [],   # apenas referência, não compara
-    "Art. LC 214/2025":         [],
+    "CNPJ":                    ["emit/CNPJ", "CNPJ"],
+    "TIPO":                    ["det/prod/xProd", "det/serv/xDescServ"],
+    "NCM/NBS":                 ["det/prod/NCM", "det/serv/NBS", "NCM", "NBS"],
+    "NCM":                     ["det/prod/NCM", "NCM"],
+    "NBS":                     ["det/serv/NBS", "NBS"],
+    "DESCRICAO":               ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
+    "DESCRICAO":               ["det/prod/xProd", "det/serv/xDescServ", "xProd", "xDescServ"],
+    "CST":                     ["CST", "CSOSN",
+                                "det/imposto/ICMS/ICMS00/CST",
+                                "det/imposto/ICMS/ICMSSN102/CSOSN",
+                                "det/imposto/PIS/PISAliq/CST",
+                                "det/imposto/COFINS/COFINSAliq/CST"],
+    "CCLASSTRIB":              ["cClassTrib", "det/imposto/cClassTrib"],
+    "CCREDPRES":               ["cCredPres", "det/imposto/cCredPres"],
+    "CCLASSTRIB OU CCREDPRES": ["cClassTrib", "cCredPres",
+                                "det/imposto/cClassTrib", "det/imposto/cCredPres"],
+    "ART. LC 214/2025":        [],
+    "Art. LC 214/2025":        [],
 }
 
 def normaliza_cnpj(v):
@@ -51,16 +51,17 @@ def normaliza(v):
 class XMLValidatorApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("XML Validator  v2.0")
+        self.title("XML Validator  v2.1")
         self.geometry("1100x700")
         self.minsize(900, 580)
         self.configure(bg=BG)
-        self.excel_path = tk.StringVar(value="Nenhum arquivo selecionado")
-        self.xml_paths  = []
-        self.results    = []
+        self.excel_path      = tk.StringVar(value="Nenhum arquivo selecionado")
+        self._excel_full_path = None
+        self.xml_paths       = []
+        self.results         = []
         self._build_ui()
 
-    # ─── UI ──────────────────────────────────────────────────────────────────
+    # ── UI ────────────────────────────────────────────────────────────────────
     def _build_ui(self):
         hdr = tk.Frame(self, bg=ACCENT, height=56)
         hdr.pack(fill="x")
@@ -86,7 +87,8 @@ class XMLValidatorApp(tk.Tk):
         self._btn(left, "Adicionar XMLs", self._load_xmls).pack(fill="x", pady=(0,4))
         self.xml_listbox = tk.Listbox(left, bg=SURFACE, fg=TEXT, selectbackground=ACCENT,
                                       relief="flat", bd=0, font=("Segoe UI", 8),
-                                      height=8, highlightthickness=1, highlightbackground=BORDER)
+                                      height=8, highlightthickness=1,
+                                      highlightbackground=BORDER)
         self.xml_listbox.pack(fill="x", pady=(0,4))
         self._btn(left, "Remover selecionado", self._remove_xml, color=SURFACE).pack(fill="x")
 
@@ -100,33 +102,36 @@ class XMLValidatorApp(tk.Tk):
         right.pack(side="left", fill="both", expand=True)
 
         self.summary_frame = tk.Frame(right, bg=SURFACE, pady=10)
-        self.summary_frame.pack(fill="x", pady=(0,10))
+        self.summary_frame.pack(fill="x", pady=(0, 10))
         for label, attr, color in [
-            ("Total","lbl_total",TEXT),("OK","lbl_ok",SUCCESS),
-            ("Divergente","lbl_err",ERROR),("Ausente","lbl_warn",WARNING),
-            ("Info","lbl_info",MUTED)]:
+            ("Total",      "lbl_total", TEXT),
+            ("OK",         "lbl_ok",    SUCCESS),
+            ("Divergente", "lbl_err",   ERROR),
+            ("Ausente",    "lbl_warn",  WARNING),
+            ("Info",       "lbl_info",  MUTED)]:
             f = tk.Frame(self.summary_frame, bg=SURFACE)
             f.pack(side="left", expand=True)
-            lv = tk.Label(f, text="0", font=("Segoe UI",20,"bold"), bg=SURFACE, fg=color)
+            lv = tk.Label(f, text="0", font=("Segoe UI", 20, "bold"), bg=SURFACE, fg=color)
             lv.pack()
-            tk.Label(f, text=label, font=("Segoe UI",8), bg=SURFACE, fg=MUTED).pack()
+            tk.Label(f, text=label, font=("Segoe UI", 8), bg=SURFACE, fg=MUTED).pack()
             setattr(self, attr, lv)
 
-        cols = ("arquivo","aba","campo","esperado","encontrado","status")
+        cols = ("arquivo", "aba", "campo", "esperado", "encontrado", "status")
         self.tree = ttk.Treeview(right, columns=cols, show="headings", height=22)
-        for c,h,w in zip(cols,
-                         ("Arquivo XML","Aba","Campo","Esperado (Excel)","Encontrado (XML)","Status"),
-                         (160,60,160,170,170,90)):
+        for c, h, w in zip(cols,
+                           ("Arquivo XML", "Aba", "Campo",
+                            "Esperado (Excel)", "Encontrado (XML)", "Status"),
+                           (160, 60, 160, 170, 170, 100)):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=w, minwidth=50, anchor="w")
 
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Treeview", background=SURFACE, foreground=TEXT,
-                        fieldbackground=SURFACE, rowheight=26, font=("Segoe UI",9))
+                        fieldbackground=SURFACE, rowheight=26, font=("Segoe UI", 9))
         style.configure("Treeview.Heading", background=BORDER, foreground=TEXT,
-                        font=("Segoe UI",9,"bold"))
-        style.map("Treeview", background=[("selected",ACCENT)])
+                        font=("Segoe UI", 9, "bold"))
+        style.map("Treeview", background=[("selected", ACCENT)])
         self.tree.tag_configure("ok",      foreground=SUCCESS)
         self.tree.tag_configure("erro",    foreground=ERROR)
         self.tree.tag_configure("missing", foreground=WARNING)
@@ -139,11 +144,11 @@ class XMLValidatorApp(tk.Tk):
 
         self.status_var = tk.StringVar(value="Pronto. Selecione o Excel e os XMLs para comecar.")
         tk.Label(self, textvariable=self.status_var, bg=SURFACE, fg=MUTED,
-                 font=("Segoe UI",8), anchor="w", padx=12, pady=6).pack(fill="x", side="bottom")
+                 font=("Segoe UI", 8), anchor="w", padx=12, pady=6).pack(fill="x", side="bottom")
 
     def _section(self, parent, text):
         tk.Label(parent, text=text, bg=BG, fg=ACCENT,
-                 font=("Segoe UI",9,"bold")).pack(anchor="w", pady=(10,2))
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(10, 2))
 
     def _sep(self, parent):
         tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", pady=8)
@@ -151,20 +156,23 @@ class XMLValidatorApp(tk.Tk):
     def _btn(self, parent, text, cmd, color=ACCENT):
         return tk.Button(parent, text=text, command=cmd, bg=color, fg="white",
                          activebackground=ACCENT2, activeforeground="white",
-                         relief="flat", bd=0, font=("Segoe UI",9), cursor="hand2", pady=8)
+                         relief="flat", bd=0, font=("Segoe UI", 9),
+                         cursor="hand2", pady=8)
 
-    # ─── Carregar arquivos ────────────────────────────────────────────────────
+    # ── Carregar arquivos ────────────────────────────────────────────────────
     def _load_excel(self):
-        path = filedialog.askopenfilename(title="Selecionar formulario Excel",
-            filetypes=[("Excel","*.xlsx *.xls"),("Todos","*.*")])
+        path = filedialog.askopenfilename(
+            title="Selecionar formulario Excel",
+            filetypes=[("Excel", "*.xlsx *.xls"), ("Todos", "*.*")])
         if path:
             self.excel_path.set(os.path.basename(path))
             self._excel_full_path = path
             self.status_var.set(f"Excel carregado: {os.path.basename(path)}")
 
     def _load_xmls(self):
-        paths = filedialog.askopenfilenames(title="Selecionar arquivos XML",
-            filetypes=[("XML","*.xml"),("Todos","*.*")])
+        paths = filedialog.askopenfilenames(
+            title="Selecionar arquivos XML",
+            filetypes=[("XML", "*.xml"), ("Todos", "*.*")])
         for p in paths:
             if p not in self.xml_paths:
                 self.xml_paths.append(p)
@@ -188,9 +196,16 @@ class XMLValidatorApp(tk.Tk):
         self._update_summary()
         self.status_var.set("Limpo. Pronto para nova validacao.")
 
-    # ─── Validação principal ──────────────────────────────────────────────────
+    # ── Validacao principal ──────────────────────────────────────────────────
     def _run(self):
-        if not hasattr(self, "_excel_full_path") or not self._excel_full_path:
+        try:
+            self._run_inner()
+        except Exception as e:
+            import traceback
+            messagebox.showerror("Erro inesperado", traceback.format_exc())
+
+    def _run_inner(self):
+        if not self._excel_full_path:
             messagebox.showwarning("Atencao", "Selecione o formulario Excel primeiro.")
             return
         if not self.xml_paths:
@@ -199,6 +214,8 @@ class XMLValidatorApp(tk.Tk):
 
         self.tree.delete(*self.tree.get_children())
         self.results.clear()
+        self.status_var.set("Processando...")
+        self.update_idletasks()
 
         try:
             dados_aba1, dados_aba2 = self._read_excel(self._excel_full_path)
@@ -213,12 +230,12 @@ class XMLValidatorApp(tk.Tk):
             try:
                 xml_flat = self._read_xml_flat(xml_path)
 
-                # ── ABA 1: apenas CNPJ (raiz) ──────────────────────────────
+                # ── ABA 1: CNPJ (raiz) ─────────────────────────────────────
                 cnpj_excel = dados_aba1.get("CNPJ", "")
                 if cnpj_excel:
-                    cnpj_xml = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
-                    raiz_excel = cnpj_raiz(cnpj_excel)
-                    raiz_xml   = cnpj_raiz(cnpj_xml) if cnpj_xml else ""
+                    cnpj_xml    = self._buscar_tag(xml_flat, ["emit/CNPJ", "CNPJ"])
+                    raiz_excel  = cnpj_raiz(cnpj_excel)
+                    raiz_xml    = cnpj_raiz(cnpj_xml) if cnpj_xml else ""
                     if not cnpj_xml:
                         status, tag = "Ausente", "missing"; warn += 1
                     elif raiz_excel == raiz_xml:
@@ -228,14 +245,14 @@ class XMLValidatorApp(tk.Tk):
                     self._add_row(fname, "Aba1", "CNPJ",
                                   cnpj_excel, cnpj_xml or "-", status, tag)
 
-                # ── ABA 2: campos de itens ─────────────────────────────────
+                # ── ABA 2: itens ────────────────────────────────────────────
                 for row in dados_aba2:
                     for col_excel, valor_excel in row.items():
                         col_upper = col_excel.strip().upper()
 
-                        # Art. LC 214/2025 — só informativo
+                        # Art. LC 214/2025 - apenas informativo
                         if "ART." in col_upper or "LC 214" in col_upper:
-                            if valor_excel:
+                            if valor_excel and str(valor_excel).strip():
                                 self._add_row(fname, "Aba2", col_excel,
                                               str(valor_excel), "—",
                                               "Referencia", "info")
@@ -246,10 +263,10 @@ class XMLValidatorApp(tk.Tk):
                         if not tags:
                             continue
 
-                        valor_xml = self._buscar_tag(xml_flat, tags)
-
                         if valor_excel is None or str(valor_excel).strip() == "":
-                            continue  # célula vazia no Excel, pula
+                            continue
+
+                        valor_xml = self._buscar_tag(xml_flat, tags)
 
                         if valor_xml is None:
                             status, tag = "Ausente", "missing"; warn += 1
@@ -259,67 +276,70 @@ class XMLValidatorApp(tk.Tk):
                             status, tag = "Divergente", "erro"; err += 1
 
                         self._add_row(fname, "Aba2", col_excel,
-                                      str(valor_excel), str(valor_xml) if valor_xml else "-",
+                                      str(valor_excel),
+                                      str(valor_xml) if valor_xml else "-",
                                       status, tag)
 
             except Exception as e:
                 self._add_row(fname, "-", "-", "-", f"Erro: {e}", "Falha", "erro")
                 err += 1
 
-        self._update_summary(ok+err+warn+info, ok, err, warn, info)
+        self._update_summary(ok + err + warn + info, ok, err, warn, info)
         self.status_var.set(
-            f"Validacao concluida  —  {ok} OK  |  {err} Divergentes  |  {warn} Ausentes  |  {info} Informacoes")
+            f"Validacao concluida  —  {ok} OK  |  {err} Divergentes  |  "
+            f"{warn} Ausentes  |  {info} Informacoes")
 
     def _add_row(self, arquivo, aba, campo, esperado, encontrado, status, tag):
         self.tree.insert("", "end",
                          values=(arquivo, aba, campo, esperado, encontrado, status),
                          tags=(tag,))
         self.results.append(dict(arquivo=arquivo, aba=aba, campo=campo,
-                                 esperado=esperado, encontrado=encontrado, status=status))
+                                 esperado=esperado, encontrado=encontrado,
+                                 status=status))
 
-    # ─── Leitura do Excel ─────────────────────────────────────────────────────
+    # ── Leitura do Excel ──────────────────────────────────────────────────────
     def _read_excel(self, path):
-        """Retorna (dict_aba1, list_of_dicts_aba2)."""
         wb = openpyxl.load_workbook(path, data_only=True)
 
-        # ── Aba 1: formulário vertical — busca CNPJ ──────────────────────────
-        ws1 = wb.worksheets[0]
-        aba1 = {}
+        # Aba 1: busca CNPJ no formulario vertical
+        ws1   = wb.worksheets[0]
+        aba1  = {}
         rows1 = list(ws1.iter_rows(values_only=True))
         for i, row in enumerate(rows1):
             for j, cell in enumerate(row):
                 if cell and str(cell).strip().upper() == "CNPJ":
-                    # tenta pegar valor na mesma linha coluna seguinte
-                    # ou próxima linha não vazia
                     val = None
-                    if j+1 < len(row) and row[j+1]:
-                        val = row[j+1]
+                    # tenta coluna seguinte na mesma linha
+                    if j + 1 < len(row) and row[j + 1]:
+                        val = row[j + 1]
                     else:
-                        for next_row in rows1[i+1:i+4]:
+                        # tenta proximas linhas
+                        for next_row in rows1[i + 1: i + 5]:
                             nv = next(
-                                (c for c in next_row if c is not None and str(c).strip() != ""), None)
-                            if nv and re.sub(r"\D","",str(nv)):
+                                (c for c in next_row
+                                 if c is not None and str(c).strip() != ""), None)
+                            if nv and re.sub(r"\D", "", str(nv)):
                                 val = nv
                                 break
                     if val:
                         aba1["CNPJ"] = str(val).strip()
                         break
 
-        # ── Aba 2: tabela com cabeçalhos ─────────────────────────────────────
+        # Aba 2: tabela com cabecalhos
         aba2 = []
         if len(wb.worksheets) >= 2:
-            ws2 = wb.worksheets[1]
+            ws2   = wb.worksheets[1]
             rows2 = list(ws2.iter_rows(values_only=True))
-            # encontra linha do cabeçalho (primeira com >= 3 células não vazias)
+            # encontra linha de cabecalho (primeira com >= 2 celulas nao vazias)
             header_idx = None
             for i, row in enumerate(rows2):
                 nv = [c for c in row if c is not None and str(c).strip() != ""]
-                if len(nv) >= 3:
+                if len(nv) >= 2:
                     header_idx = i
                     break
             if header_idx is not None:
                 headers = [str(h).strip() if h else "" for h in rows2[header_idx]]
-                for row in rows2[header_idx+1:]:
+                for row in rows2[header_idx + 1:]:
                     if all(c is None or str(c).strip() == "" for c in row):
                         continue
                     d = {}
@@ -332,9 +352,8 @@ class XMLValidatorApp(tk.Tk):
         wb.close()
         return aba1, aba2
 
-    # ─── Leitura do XML ───────────────────────────────────────────────────────
+    # ── Leitura do XML ────────────────────────────────────────────────────────
     def _read_xml_flat(self, path):
-        """Retorna dict com chaves = caminho/tag (sem namespace), valor = texto."""
         tree = ET.parse(path)
         root = tree.getroot()
         data = {}
@@ -349,38 +368,31 @@ class XMLValidatorApp(tk.Tk):
         text = (element.text or "").strip()
         if text:
             data[key] = text
-            # guarda também só pelo nome da tag (sem caminho) para fallback
             if tag not in data:
                 data[tag] = text
         for child in element:
             self._flatten(child, key, data)
 
-    # ─── Helpers ─────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────
     def _resolver_tags(self, col_upper):
-        """Retorna lista de tags XML para um nome de coluna do Excel."""
         for k, v in MAPA_CAMPOS.items():
             if k.upper() == col_upper:
                 return v
-        # fallback: usa o próprio nome como tag
-        return [col_upper]
+        return [col_upper]   # fallback: usa o proprio nome como tag
 
     def _buscar_tag(self, xml_flat, tags):
-        """Tenta cada tag da lista e retorna o primeiro valor encontrado."""
         for t in tags:
-            # busca exata
             if t in xml_flat:
                 return xml_flat[t]
-            # busca pelo sufixo (nome da tag sem caminho)
             tag_name = t.split("/")[-1]
             if tag_name in xml_flat:
                 return xml_flat[tag_name]
-            # busca parcial no caminho
             for k, v in xml_flat.items():
                 if k.endswith(f"/{tag_name}") or k == tag_name:
                     return v
         return None
 
-    # ─── Resumo ───────────────────────────────────────────────────────────────
+    # ── Resumo ────────────────────────────────────────────────────────────────
     def _update_summary(self, total=0, ok=0, err=0, warn=0, info=0):
         self.lbl_total.config(text=str(total))
         self.lbl_ok.config(text=str(ok))
@@ -388,13 +400,15 @@ class XMLValidatorApp(tk.Tk):
         self.lbl_warn.config(text=str(warn))
         self.lbl_info.config(text=str(info))
 
-    # ─── Exportar ─────────────────────────────────────────────────────────────
+    # ── Exportar ──────────────────────────────────────────────────────────────
     def _export(self):
         if not self.results:
             messagebox.showwarning("Atencao", "Execute a validacao antes de exportar.")
             return
-        path = filedialog.asksaveasfilename(defaultextension=".xlsx",
-            filetypes=[("Excel","*.xlsx"),("CSV","*.csv")], title="Salvar relatorio")
+        path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx"), ("CSV", "*.csv")],
+            title="Salvar relatorio")
         if not path:
             return
         try:
@@ -412,7 +426,8 @@ class XMLValidatorApp(tk.Tk):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Resultado"
-        ws.append(["Arquivo XML","Aba","Campo","Esperado (Excel)","Encontrado (XML)","Status"])
+        ws.append(["Arquivo XML", "Aba", "Campo",
+                   "Esperado (Excel)", "Encontrado (XML)", "Status"])
         hdr_fill = PatternFill("solid", fgColor="7C6AF7")
         for cell in ws[1]:
             cell.fill = hdr_fill
@@ -423,12 +438,12 @@ class XMLValidatorApp(tk.Tk):
         fill_warn = PatternFill("solid", fgColor="FFF0CC")
         fill_info = PatternFill("solid", fgColor="E8E8F0")
         for r in self.results:
-            ws.append([r["arquivo"],r["aba"],r["campo"],
-                       r["esperado"],r["encontrado"],r["status"]])
-            s = r["status"]
-            fill = (fill_ok if "OK" in s else
-                    fill_err if "Divergente" in s or "Falha" in s else
-                    fill_info if "Referencia" in s else fill_warn)
+            ws.append([r["arquivo"], r["aba"], r["campo"],
+                       r["esperado"], r["encontrado"], r["status"]])
+            s    = r["status"]
+            fill = (fill_ok   if "OK"          in s else
+                    fill_err  if "Divergente"  in s or "Falha" in s else
+                    fill_info if "Referencia"  in s else fill_warn)
             for cell in ws[ws.max_row]:
                 cell.fill = fill
         for col in ws.columns:
@@ -438,8 +453,9 @@ class XMLValidatorApp(tk.Tk):
     def _export_csv(self, path):
         import csv
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f,
-                fieldnames=["arquivo","aba","campo","esperado","encontrado","status"])
+            writer = csv.DictWriter(
+                f, fieldnames=["arquivo", "aba", "campo",
+                               "esperado", "encontrado", "status"])
             writer.writeheader()
             writer.writerows(self.results)
 
