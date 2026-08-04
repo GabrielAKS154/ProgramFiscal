@@ -123,14 +123,19 @@ class XMLValidatorApp(tk.Tk):
 
         self._sep(left)
         self._section(left, "Legenda (por linha)")
-        for cor, txt in [
-            (SUCCESS, "OK"),
-            (ERROR,   "Divergente"),
-            (WARNING, "Vazio no XML"),
-            (INFO,    "Vazio no Excel"),
-            (GRAY,    "Vazio (ambos)"),
-            (MUTED,   "Referencia legal"),
-        ]:
+    for cor, txt in [
+2
+(SUCCESS, "OK"),
+3
+(ERROR, "Divergente"),
+4
+(WARNING, "Vazio no XML"),
+5
+(INFO, "Vazio no Excel"),
+6
+(GRAY, "Vazio (ambos)"),
+7
+]:
             row = tk.Frame(left, bg=BG)
             row.pack(anchor="w", pady=2)
             tk.Frame(row, bg=cor, width=14, height=14).pack(side="left", padx=(0, 8))
