@@ -1,2 +1,2 @@
 @echo off
-python xml_validator.py
+pythonw xml_validator.py
